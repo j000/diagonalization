@@ -67,11 +67,22 @@ CXXFLAGS ?= $(WARNINGS) -std=c++14 -O2 -fstack-protector-strong
 # for future use if needed
 DEPFLAGS ?=
 LDLIBS += -lm
+# if there are any cpp files, link with c++ library
+ifneq ($(filter %.cpp,$(SRC)),)
+	LDLIBS += -lstdc++
+endif
 
 # remove all symbol table and relocation information from the executable
 LDFLAGS += -s
 
 ##########
+
+# Intel MKL
+CFLAGS += -I"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/include"
+CXXFLAGS += -I"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/include"
+LDLIBS += -lmkl_intel_lp64 -lmkl_gnu_thread -lmkl_core -liomp5 -lpthread -lm
+LDFLAGS += -L"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/lib/intel64"
+LDFLAGS += -L"/opt/intel/compilers_and_libraries_2016.2.181/linux/compiler/lib/intel64"
 
 # add unicode support
 CFLAGS += $(shell pkg-config --cflags-only-I icu-uc icu-io)
