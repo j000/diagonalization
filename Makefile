@@ -86,11 +86,19 @@ CFLAGS += -isystem"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/inclu
 CXXFLAGS += -isystem"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/include"
 LDLIBS += -Wl,--start-group
 LDLIBS += -lmkl_intel_ilp64
-LDLIBS += -lmkl_intel_thread
+ifeq ($(thread),gnu)
+	LDLIBS += -lmkl_gnu_thread
+else
+	LDLIBS += -lmkl_intel_thread
+endif
 LDLIBS += -lmkl_core
 LDLIBS += -Wl,--end-group
 
-LDLIBS += -liomp5
+ifeq ($(thread),gnu)
+	LDLIBS += -lgomp
+else
+	LDLIBS += -liomp5
+endif
 LDLIBS += -lpthread
 LDLIBS += -lm
 LDLIBS += -ldl
