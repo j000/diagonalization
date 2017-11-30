@@ -61,9 +61,11 @@ CWARNINGS += -Werror=strict-prototypes
 # this probably should be enabled only in bigger projects
 #CWARNINGS += -Wmissing-prototypes
 
+MARCH := -march=native -mtune=core2
+
 # standards (ANSI C, ANSI C++)
-CFLAGS ?= $(CWARNINGS) -std=c11 -O2 -fstack-protector-strong
-CXXFLAGS ?= $(WARNINGS) -std=c++14 -O2 -fstack-protector-strong
+CFLAGS ?= $(CWARNINGS) -std=c11 -O2 -fstack-protector-strong -m64 $(MARCH)
+CXXFLAGS ?= $(WARNINGS) -std=c++14 -O2 -fstack-protector-strong -m64 $(MARCH)
 # for future use if needed
 DEPFLAGS ?= -MP
 LDLIBS += -lm
@@ -72,6 +74,8 @@ ifneq ($(filter %.cpp,$(SRC)),)
 	LDLIBS += -lstdc++
 endif
 
+# static link
+LDFLAGS += -static -static-libgcc
 # remove all symbol table and relocation information from the executable
 LDFLAGS += -s
 
@@ -80,7 +84,16 @@ LDFLAGS += -s
 # Intel MKL
 CFLAGS += -isystem"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/include"
 CXXFLAGS += -isystem"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/include"
-LDLIBS += -lmkl_intel_lp64 -lmkl_gnu_thread -lmkl_core -liomp5 -lpthread -lm
+LDLIBS += -Wl,--start-group
+LDLIBS += -lmkl_intel_ilp64
+LDLIBS += -lmkl_intel_thread
+LDLIBS += -lmkl_core
+LDLIBS += -Wl,--end-group
+
+LDLIBS += -liomp5
+LDLIBS += -lpthread
+LDLIBS += -lm
+LDLIBS += -ldl
 LDFLAGS += -L"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/lib/intel64"
 LDFLAGS += -L"/opt/intel/compilers_and_libraries_2016.2.181/linux/compiler/lib/intel64"
 
