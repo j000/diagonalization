@@ -119,6 +119,7 @@ int main(int argc, char **argv) {
 				fprintf(stderr, "Something went wrong while opening /dev/urandom\n");
 				exit(EXIT_FAILURE);
 			}
+			fclose(urandom);
 		}
 
 	/* initialize random stream */
