@@ -65,7 +65,7 @@ CWARNINGS += -Werror=strict-prototypes
 CFLAGS ?= $(CWARNINGS) -std=c11 -O2 -fstack-protector-strong
 CXXFLAGS ?= $(WARNINGS) -std=c++14 -O2 -fstack-protector-strong
 # for future use if needed
-DEPFLAGS ?=
+DEPFLAGS ?= -MP
 LDLIBS += -lm
 # if there are any cpp files, link with c++ library
 ifneq ($(filter %.cpp,$(SRC)),)
@@ -78,8 +78,8 @@ LDFLAGS += -s
 ##########
 
 # Intel MKL
-CFLAGS += -I"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/include"
-CXXFLAGS += -I"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/include"
+CFLAGS += -isystem"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/include"
+CXXFLAGS += -isystem"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/include"
 LDLIBS += -lmkl_intel_lp64 -lmkl_gnu_thread -lmkl_core -liomp5 -lpthread -lm
 LDFLAGS += -L"/opt/intel/compilers_and_libraries_2016.2.181/linux/mkl/lib/intel64"
 LDFLAGS += -L"/opt/intel/compilers_and_libraries_2016.2.181/linux/compiler/lib/intel64"
@@ -170,16 +170,12 @@ $(OBJDIR)/%.cpp.o: $(DEPDIR)/%.cpp.d
 # build dependecies list
 $(DEPDIR)/%.c.d: $(SRCDIR)/%.c
 	@printf "$(COLOR)Generating dependencies $(SRCDIR)/$*.c -> $@$(RESET)\\n"
-	$(CC) $(DEPFLAGS) -MM -MT '$$(OBJDIR)/$*.c.o' $< | sed 's,^\([^:]\+.o\):,\1 $$(DEPDIR)/$*.c.d:,' > $@
-# $(CC) $(DEPFLAGS) -MM -MT '$$(OBJDIR)/$*.c.o' -MF $@ $<
-# sed -i 's,^\([^:]\+.o\):,\1 $$(DEPDIR)/$*.c.d:,' $@
+	$(CC) $(CFLAGS) $(DEPFLAGS) -MM -MT '$$(OBJDIR)/$*.c.o' $< | sed 's,^\([^:]\+.o\):,\1 $$(DEPDIR)/$*.c.d:,' > $@
 
 # build dependecies list
 $(DEPDIR)/%.cpp.d: $(SRCDIR)/%.cpp
 	@printf "$(COLOR)Generating dependencies $(SRCDIR)/$*.cpp -> $@$(RESET)\\n"
-	$(CXX) $(DEPFLAGS) -MM -MT '$$(OBJDIR)/$*.cpp.o' $< | sed 's,^\([^:]\+.o\):,\1 $$(DEPDIR)/$*.cpp.d:,' > $@
-# $(CXX) $(DEPFLAGS) -MM -MT '$$(OBJDIR)/$*.cpp.o' -MF $@ $<
-# sed -i 's,^\([^:]\+.o\):,\1 $$(DEPDIR)/$*.cpp.d:,' $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) -MM -MT '$$(OBJDIR)/$*.cpp.o' $< | sed 's,^\([^:]\+.o\):,\1 $$(DEPDIR)/$*.cpp.d:,' > $@
 
 # include generated dependencies
 -include $(wildcard $(DEP))
