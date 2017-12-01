@@ -8,6 +8,7 @@
 #include <time.h>
 #include <errno.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #include <math.h>
 
@@ -64,7 +65,7 @@ void my_free(void *mem) {
 #endif /* ifndef USE_MKL_ALLOC */
 }
 
-void timer(const char *text) {
+void print_timer(const char *text, bool reset_delta) {
 	static struct timespec start = { 0 };
 	static struct timespec last = { 0 };
 	static struct timespec tmp;
@@ -77,14 +78,23 @@ void timer(const char *text) {
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &tmp);
 
-	double difference = (tmp.tv_sec - start.tv_sec) +
-		(tmp.tv_nsec - start.tv_nsec) * 1e-9;
-
-	printf("TIMER: %8.3lfs ", difference);
-	difference = (tmp.tv_sec - last.tv_sec) + (tmp.tv_nsec - last.tv_nsec) *
+	double total = (tmp.tv_sec - start.tv_sec) + (tmp.tv_nsec - start.tv_nsec) *
 		1e-9;
-	printf("(%+8.3lfs) - %s\n", difference, text);
-	last = tmp;
+	double delta = (tmp.tv_sec - last.tv_sec) + (tmp.tv_nsec - last.tv_nsec) *
+		1e-9;
+
+	printf("TIMER: %6.2lfs %25s:%6.2lfs\n", total, text, delta);
+
+	if (reset_delta)
+		last = tmp;
+}
+
+void timer(const char *text) {
+	print_timer(text, true);
+}
+
+void timer_no_delta(const char *text) {
+	print_timer(text, false);
 }
 
 /**
@@ -154,6 +164,9 @@ void *write_matrix(void *arg_struct) {
 		fprintf(output, "\n");
 	}
 	my_free(arg_struct);
+
+	timer_no_delta("Writing");
+
 	return NULL;
 }
 
@@ -164,13 +177,16 @@ int main(int argc, char **argv) {
 	int_fast32_t seed = 0;
 	pthread_t writer;
 
+	timer("Start");
+
 	assert(size * size * sizeof(*matrix) <= SIZE_MAX);
 	assert(sizeof(MKL_INT) == sizeof(size_t));
 
-	timer("Start");
 
 	/* mkl_disable_fast_mm(); */
 	mkl_peak_mem_usage(MKL_PEAK_MEM_ENABLE);
+
+	timer("Parsing options");
 
 	if (seed == 0) /* get random seed */
 		if (getrandom(&seed, sizeof(seed), 0) == -1) {
@@ -201,8 +217,6 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	timer("Generating");
-
 	matrix = my_calloc(size * size, sizeof(*matrix));
 
 	/* generate less random numbers
@@ -211,6 +225,8 @@ int main(int argc, char **argv) {
 	/* gaussian(matrix, size*size, sqrt(size)); */
 	for (size_t i = 0; i < size; i++)
 		gaussian(&matrix[i * (size + 1)], size - i, size, stream);
+
+	timer("Generating");
 
 	/* make symmetrical */
 	for (size_t i = 1; i < size; ++i)
@@ -233,7 +249,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	timer("Computing");
+	timer("Starting thread");
 
 	/* **** */
 
@@ -283,7 +299,8 @@ int main(int argc, char **argv) {
 	}
 	printf("%" MKL_FORMAT "\n", M);
 
-	timer("Done");
+	timer("Computing");
+
 	/* **** */
 
 	vslDeleteStream(&stream);
