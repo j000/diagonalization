@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include <string.h>
 #include <pthread.h>
 #include <time.h>
@@ -15,7 +16,7 @@
 #define MKL_ILP64 /* in order to use size_t instead of MKL_INT */
 #define MKL_INT int_fast64_t
 #define MKL_UINT uint_fast64_t
-#define MKL_FORMAT "ld"
+#define MKL_FORMAT PRIdFAST64
 
 #include <mkl_solvers_ee.h>
 #include <mkl_vsl.h>
@@ -41,7 +42,7 @@ void *my_calloc(size_t n, size_t size) {
 		return tmp;
 	fprintf(
 		stderr,
-		"Calloc failed (%ld x %ld = %ldkB): %s. Aborting.\n",
+		"Calloc failed (%zu x %zu = %zukB): %s. Aborting.\n",
 		n,
 		size,
 		n * size / 1024,
@@ -134,13 +135,14 @@ struct arguments {
 void *write_matrix(void *arg_struct) {
 	struct arguments *args = (struct arguments *)arg_struct;
 
-	fprintf(stderr, "%ld\n", args->size);
+	fprintf(stderr, "%zu\n", args->size);
 	for (size_t i = 0; i < args->size; ++i) {
 		for (size_t j = 0; j < args->size; ++j)
 			fprintf(stderr, "%16.9e ", args->matrix[i * args->size + j]);
 		fprintf(stderr, "\n");
 	}
 	my_free(arg_struct);
+	return NULL;
 }
 
 int main(int argc, char **argv) {
