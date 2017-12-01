@@ -74,6 +74,11 @@ void timer(const char *text) {
 
 /**
  * Random number generator of Gaussian (normal) distribution.
+ *
+ * @param[out] buf Pointer to where to store random numbers.
+ * @param[in] size How many numbers to generate.
+ * @param[in] sigma Sigma in Gaussian distribution.
+ * @param stream Random numbers stream to use.
  */
 void gaussian(
 	double *buf,
