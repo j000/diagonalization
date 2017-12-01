@@ -134,12 +134,24 @@ struct arguments {
 
 void *write_matrix(void *arg_struct) {
 	struct arguments *args = (struct arguments *)arg_struct;
+	FILE *output;
 
-	fprintf(stderr, "%zu\n", args->size);
+	if (args->filename == NULL) {
+		output = stderr;
+	} else {
+		output = fopen(args->filename, "w");
+		if (output == NULL) {
+			fprintf(stderr, "Uname to open %s for writing.\n", args->filename);
+			fprintf(stderr, "INPUT MATRIX WILL NOT BE WRITTEN!\n");
+			return NULL;
+		}
+	}
+
+	fprintf(output, "%zu\n", args->size);
 	for (size_t i = 0; i < args->size; ++i) {
 		for (size_t j = 0; j < args->size; ++j)
-			fprintf(stderr, "%16.9e ", args->matrix[i * args->size + j]);
-		fprintf(stderr, "\n");
+			fprintf(output, "%16.9e ", args->matrix[i * args->size + j]);
+		fprintf(output, "\n");
 	}
 	my_free(arg_struct);
 	return NULL;
