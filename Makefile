@@ -121,6 +121,8 @@ LIBDEP := $(foreach lib,$(LIB),$(LIBDIR)/$(lib)/lib$(lib).a)
 
 # add libraries
 LDFLAGS += $(foreach lib,$(LIB),-L$(LIBDIR)/$(lib)/)
+CFLAGS += $(foreach lib,$(LIB),-I$(LIBDIR)/$(lib)/)
+CXXFLAGS += $(foreach lib,$(LIB),-I$(LIBDIR)/$(lib)/)
 
 STYLE := $(filter %.c %.h %.cpp %.hpp,$(SRC))
 
