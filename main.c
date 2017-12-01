@@ -30,8 +30,11 @@
  * @param size element size in bytes
  */
 void *my_calloc(size_t n, size_t size) {
+#ifndef USE_MKL_ALLOC
 	void *tmp = calloc(n, size);
-	/* void *tmp = mkl_calloc(n, size, 64); */
+#else
+	void *tmp = mkl_calloc(n, size, 64);
+#endif
 
 	if (tmp != NULL)
 		return tmp;
@@ -112,9 +115,10 @@ struct arguments {
 void *write_matrix(void *arg_struct) {
 	struct arguments *args = (struct arguments *)arg_struct;
 
+	fprintf(stderr, "%ld\n", args->size);
 	for (size_t i = 0; i < args->size; ++i) {
 		for (size_t j = 0; j < args->size; ++j)
-			fprintf(stderr, "%15.8e ", args->matrix[i * args->size + j]);
+			fprintf(stderr, "%16.9e ", args->matrix[i * args->size + j]);
 		fprintf(stderr, "\n");
 	}
 	free(arg_struct);
@@ -252,8 +256,11 @@ int main(int argc, char **argv) {
 	vslDeleteStream(&stream);
 	mkl_free_buffers();
 	mkl_finalize();
+#ifndef USE_MKL_ALLOC
 	free(matrix);
-	/* mkl_free(matrix); */
+#else
+	mkl_free(matrix);
+#endif
 
 	{
 		int N_AllocatedBuffers;
