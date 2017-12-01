@@ -26,13 +26,14 @@
 /**
  * Calloc wrapper: shows message and exits on error.
  *
- * @param n number of elements to allocate
- * @param size element size in bytes
+ * @param n Number of elements to allocate.
+ * @param size Element size in bytes.
+ * @return Pointer to allocated memory.
  */
 void *my_calloc(size_t n, size_t size) {
 #ifndef USE_MKL_ALLOC
 	void *tmp = calloc(n, size);
-#else  /* ifndef USE_MKL_ALLOC */
+#else /* ifndef USE_MKL_ALLOC */
 	void *tmp = mkl_calloc(n, size, 64);
 #endif /* ifndef USE_MKL_ALLOC */
 
@@ -49,10 +50,15 @@ void *my_calloc(size_t n, size_t size) {
 	exit(EXIT_FAILURE);
 }
 
+/**
+ * Free wrapper. Because we have different allocs, it's easier to have a wrapper.
+ *
+ * @param[in] mem Pointer to be freed.
+ */
 void my_free(void *mem) {
 #ifndef USE_MKL_ALLOC
 	free(mem);
-#else  /* ifndef USE_MKL_ALLOC */
+#else /* ifndef USE_MKL_ALLOC */
 	mkl_free(mem);
 #endif /* ifndef USE_MKL_ALLOC */
 }
