@@ -5,6 +5,7 @@
 #include <inttypes.h>
 #include <string.h>
 #include <pthread.h>
+#include <getopt.h>
 #include <time.h>
 #include <errno.h>
 #include <assert.h>
@@ -176,12 +177,89 @@ int main(int argc, char **argv) {
 	VSLStreamStatePtr stream = NULL;
 	int_fast32_t seed = 0;
 	pthread_t writer;
+	char *filename = NULL;
 
 	timer("Start");
 
 	assert(size * size * sizeof(*matrix) <= SIZE_MAX);
 	assert(sizeof(MKL_INT) == sizeof(size_t));
 
+	/* option parsing */
+	{
+		extern int opterr;
+
+		opterr = 0;
+		while (1) {
+			/* getopt_long stores the option index here. */
+			int option_index = 0;
+			char c;
+			static struct option long_options[] = {
+				{ "file", required_argument, 0, 'f' },
+				{ "size", required_argument, 0, 's' },
+				{ 0, 0, 0, 0 }
+			};
+
+			c = getopt_long(
+				argc,
+				argv,
+				"f:s:",
+				long_options,
+				&option_index
+				);
+
+			/* Detect the end of the options. */
+			if (c == -1)
+				break;
+
+			switch (c) {
+			case 0:
+				/* If this option set a flag, do nothing else now. */
+				if (long_options[option_index].flag != 0)
+					break;
+				printf("option %s", long_options[option_index].name);
+				if (optarg)
+					printf(" with arg %s", optarg);
+				printf("\n");
+				break;
+
+			case 'f': {
+					size_t length = strlen(optarg);
+
+					filename = my_calloc(length + 1, sizeof(*filename));
+					strncpy(filename, optarg, length);
+					break;
+				}
+
+			case 's': {
+					size_t tmp = 0;
+
+					if (1 == sscanf(optarg, "%zu", &tmp)) {
+						printf("len is %zu\n", tmp);
+						size = tmp;
+					}
+					break;
+				}
+
+			case '?':
+				fprintf(stderr, "Unknown option %d\n", optopt);
+				exit(EXIT_FAILURE);
+				/* getopt_long already printed an error message. */
+				break;
+
+			default:
+				fprintf(stderr, "Unexpected result from getopt_long\n");
+				exit(EXIT_FAILURE);
+			}
+		}
+
+		/* Print any remaining command line arguments (not options). */
+		if (optind < argc) {
+			fprintf(stderr, "Unknown arguments: ");
+			while (optind < argc)
+				printf("%s\n", argv[optind++]);
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	/* mkl_disable_fast_mm(); */
 	mkl_peak_mem_usage(MKL_PEAK_MEM_ENABLE);
@@ -238,7 +316,7 @@ int main(int argc, char **argv) {
 
 		args->matrix = matrix;
 		args->size = size;
-		args->filename = "test";
+		args->filename = filename;
 
 		/* create a second thread */
 		if (pthread_create(&writer, NULL, write_matrix, args) != 0) {
