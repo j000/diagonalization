@@ -32,9 +32,9 @@
 void *my_calloc(size_t n, size_t size) {
 #ifndef USE_MKL_ALLOC
 	void *tmp = calloc(n, size);
-#else
+#else  /* ifndef USE_MKL_ALLOC */
 	void *tmp = mkl_calloc(n, size, 64);
-#endif
+#endif /* ifndef USE_MKL_ALLOC */
 
 	if (tmp != NULL)
 		return tmp;
@@ -47,6 +47,14 @@ void *my_calloc(size_t n, size_t size) {
 		strerror(errno)
 	);
 	exit(EXIT_FAILURE);
+}
+
+void my_free(void *mem) {
+#ifndef USE_MKL_ALLOC
+	free(mem);
+#else  /* ifndef USE_MKL_ALLOC */
+	mkl_free(mem);
+#endif /* ifndef USE_MKL_ALLOC */
 }
 
 void timer(const char *text) {
@@ -126,7 +134,7 @@ void *write_matrix(void *arg_struct) {
 			fprintf(stderr, "%16.9e ", args->matrix[i * args->size + j]);
 		fprintf(stderr, "\n");
 	}
-	free(arg_struct);
+	my_free(arg_struct);
 }
 
 int main(int argc, char **argv) {
@@ -261,11 +269,7 @@ int main(int argc, char **argv) {
 	vslDeleteStream(&stream);
 	mkl_free_buffers();
 	mkl_finalize();
-#ifndef USE_MKL_ALLOC
-	free(matrix);
-#else
-	mkl_free(matrix);
-#endif
+	my_free(matrix);
 
 	{
 		int N_AllocatedBuffers;
