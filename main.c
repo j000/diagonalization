@@ -148,7 +148,7 @@ void *write_matrix(void *arg_struct) {
 	FILE *output;
 
 	if (args->filename == NULL) {
-		output = stderr;
+		output = stdout;
 	} else {
 		output = fopen(args->filename, "w");
 		if (output == NULL) {
@@ -164,6 +164,9 @@ void *write_matrix(void *arg_struct) {
 			fprintf(output, "%16.9e ", args->matrix[i * args->size + j]);
 		fprintf(output, "\n");
 	}
+
+	if (args->filename != NULL)
+		fclose(output);
 	my_free(arg_struct);
 
 	timer_no_delta("Writing");
@@ -172,7 +175,7 @@ void *write_matrix(void *arg_struct) {
 }
 
 int main(int argc, char **argv) {
-	size_t size = 2000;
+	size_t size = 10;
 	double *matrix;
 	VSLStreamStatePtr stream = NULL;
 	int_fast32_t seed = 0;
@@ -212,19 +215,11 @@ int main(int argc, char **argv) {
 				break;
 
 			switch (c) {
-			case 0:
-				/* If this option set a flag, do nothing else now. */
-				if (long_options[option_index].flag != 0)
-					break;
-				printf("option %s", long_options[option_index].name);
-				if (optarg)
-					printf(" with arg %s", optarg);
-				printf("\n");
-				break;
-
 			case 'f': {
 					size_t length = strlen(optarg);
 
+					if (filename != NULL)
+						my_free(filename);
 					filename = my_calloc(length + 1, sizeof(*filename));
 					strncpy(filename, optarg, length);
 					break;
@@ -233,17 +228,14 @@ int main(int argc, char **argv) {
 			case 's': {
 					size_t tmp = 0;
 
-					if (1 == sscanf(optarg, "%zu", &tmp)) {
-						printf("len is %zu\n", tmp);
+					if (1 == sscanf(optarg, "%zu", &tmp))
 						size = tmp;
-					}
 					break;
 				}
 
 			case '?':
 				fprintf(stderr, "Unknown option %d\n", optopt);
 				exit(EXIT_FAILURE);
-				/* getopt_long already printed an error message. */
 				break;
 
 			default:
@@ -259,6 +251,12 @@ int main(int argc, char **argv) {
 				printf("%s\n", argv[optind++]);
 			exit(EXIT_FAILURE);
 		}
+
+		printf("\n");
+		printf("Generating matrix %zux%zu.\n", size, size);
+		if (filename != NULL)
+			printf("Writing input matrix into file %s.\n", filename);
+		printf("\n");
 	}
 
 	/* mkl_disable_fast_mm(); */
