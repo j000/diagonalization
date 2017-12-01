@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 #include <time.h>
 #include <errno.h>
 #include <assert.h>
@@ -11,7 +12,7 @@
 
 #include <sys/random.h>
 
-#define MKL_ILP64      /* in order to use size_t instead of MKL_INT */
+#define MKL_ILP64 /* in order to use size_t instead of MKL_INT */
 #define MKL_INT int_fast64_t
 #define MKL_UINT uint_fast64_t
 #define MKL_FORMAT "ld"
@@ -45,7 +46,7 @@ void *my_calloc(size_t n, size_t size) {
 	exit(EXIT_FAILURE);
 }
 
-void timer(const char* text) {
+void timer(const char *text) {
 	static struct timespec start = { 0 };
 	static struct timespec last = { 0 };
 	static struct timespec tmp;
@@ -57,10 +58,14 @@ void timer(const char* text) {
 	}
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &tmp);
-	double difference = (tmp.tv_sec - start.tv_sec) + (tmp.tv_nsec - start.tv_nsec) * 1e-9;
-	printf("TIMER: %7.2lfs ", difference);
-	difference = (tmp.tv_sec - last.tv_sec) + (tmp.tv_nsec - last.tv_nsec) * 1e-9;
-	printf("(%+7.2lfs) - %s\n", difference, text);
+
+	double difference = (tmp.tv_sec - start.tv_sec) +
+		(tmp.tv_nsec - start.tv_nsec) * 1e-9;
+
+	printf("TIMER: %8.3lfs ", difference);
+	difference = (tmp.tv_sec - last.tv_sec) + (tmp.tv_nsec - last.tv_nsec) *
+		1e-9;
+	printf("(%+8.3lfs) - %s\n", difference, text);
 	last = tmp;
 }
 
@@ -89,18 +94,38 @@ void gaussian(
 	if (status != VSL_STATUS_OK) {
 		fprintf(
 			stderr,
-			"Random number generator failed with error %" MKL_FORMAT "\n",
+			"Random number generator failed with error %" MKL_FORMAT ".\n",
 			status
 		);
 		exit(EXIT_FAILURE);
 	}
 }
 
+/* thread stuff */
+
+struct arguments {
+	double *matrix;
+	size_t size;
+	char *filename;
+};
+
+void *write_matrix(void *arg_struct) {
+	struct arguments *args = (struct arguments *)arg_struct;
+
+	for (size_t i = 0; i < args->size; ++i) {
+		for (size_t j = 0; j < args->size; ++j)
+			fprintf(stderr, "%15.8e ", args->matrix[i * args->size + j]);
+		fprintf(stderr, "\n");
+	}
+	free(arg_struct);
+}
+
 int main(int argc, char **argv) {
 	size_t size = 2000;
 	double *matrix;
-	static VSLStreamStatePtr stream = NULL;
-	static int_fast32_t seed = 0;
+	VSLStreamStatePtr stream = NULL;
+	int_fast32_t seed = 0;
+	pthread_t writer;
 
 	assert(size * size * sizeof(*matrix) <= SIZE_MAX);
 	assert(sizeof(MKL_INT) == sizeof(size_t));
@@ -116,7 +141,10 @@ int main(int argc, char **argv) {
 			/* manually read /dev/urandom */
 			FILE *urandom = fopen("/dev/urandom", "r");
 			if (urandom == NULL	|| fread(&seed, sizeof(seed), 1, urandom) < 1) {
-				fprintf(stderr, "Something went wrong while opening /dev/urandom\n");
+				fprintf(
+					stderr,
+					"Something went wrong while opening /dev/urandom.\n"
+				);
 				exit(EXIT_FAILURE);
 			}
 			fclose(urandom);
@@ -129,7 +157,7 @@ int main(int argc, char **argv) {
 		if (status != VSL_STATUS_OK) {
 			fprintf(
 				stderr,
-				"Cannot create new random stream. Error %" MKL_FORMAT "\n",
+				"Cannot create new random stream. Error %" MKL_FORMAT ".\n",
 				status
 			);
 			exit(EXIT_FAILURE);
@@ -152,12 +180,21 @@ int main(int argc, char **argv) {
 		for (size_t j = 0; j < i; ++j)
 			matrix[i * size + j] = matrix[j * size + i];
 
-	/* print */
-	/* for (size_t i = 0; i < size; ++i) { */
-	/*  for (size_t j = 0; j < size; ++j) */
-	/*      printf("%7.3f ", matrix[i * size + j]); */
-	/*  printf("\n"); */
-	/* } */
+	{
+		struct arguments *args = my_calloc(1, sizeof(*args));
+
+		args->matrix = matrix;
+		args->size = size;
+		args->filename = "test";
+
+		/* create a second thread */
+		if (pthread_create(&writer, NULL, write_matrix, args) != 0) {
+			fprintf(stderr, "Error creating thread. Writing locally.\n");
+			timer("Writing");
+			write_matrix(args);
+			/* exit(EXIT_FAILURE); */
+		}
+	}
 
 	timer("Computing");
 
@@ -166,12 +203,12 @@ int main(int argc, char **argv) {
 	/* FEAST variables */
 	MKL_INT fpm[128] = { 0 };                       /* parameters */
 	const char type = 'F';                          /* full matrix */
-	double Emax = size * size;                         /* search inteval [ Emin ; Emax ] */
+	double Emax = size * size;                      /* search inteval [ Emin ; Emax ] */
 	double Emin = -Emax;
 	double epsilon = 0;
 	MKL_INT loops = 0;
-	MKL_INT M0 = size;                               /* guessed subspace dimension */
-	MKL_INT M = 0;                                   /* number of eigenvalues found */
+	MKL_INT M0 = size;                              /* guessed subspace dimension */
+	MKL_INT M = 0;                                  /* number of eigenvalues found */
 	double *E = my_calloc(size, sizeof(*E));        /* eigenvalues */
 	double *X = my_calloc(size * size, sizeof(*X)); /* eigenvectors */
 	double *res = my_calloc(size, sizeof(*res));    /* residual */
@@ -184,9 +221,9 @@ int main(int argc, char **argv) {
 	/* call solver */
 	dfeast_syev(
 		&type,                                      /* matrix type */
-		(MKL_INT*)&size,                                      /* size of the problem */
+		(MKL_INT *)&size,                           /* size of the problem */
 		matrix,                                     /* matrix */
-		(MKL_INT*)&size,                                      /* size of matrix */
+		(MKL_INT *)&size,                           /* size of matrix */
 		fpm,                                        /* parameters */
 		&epsilon,                                   /* out: relative error */
 		&loops,                                     /* out: number of loops executed */
@@ -201,7 +238,7 @@ int main(int argc, char **argv) {
 	);
 
 	if (info != 0) {
-		printf("dfeast_syev error: %" MKL_FORMAT "\n", info);
+		printf("dfeast_syev error: %" MKL_FORMAT ".\n", info);
 		printf(
 			"https://software.intel.com/en-us/mkl-developer-reference-c-extended-eigensolver-output-details\n"
 		);
@@ -225,10 +262,11 @@ int main(int argc, char **argv) {
 		if (AllocatedBytes > 0) {
 			printf("MKL memory leak!\n");
 			printf(
-				"After mkl_free_buffers there are %ld bytes in %d buffers\n",
+				"After mkl_free_buffers there are %ld bytes in %d buffers.\n",
 				AllocatedBytes,
 				N_AllocatedBuffers
 			);
 		}
 	}
+	pthread_join(writer, NULL);
 }
