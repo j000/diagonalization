@@ -5,7 +5,7 @@
 #include <inttypes.h>
 #include <string.h>
 #include <pthread.h>
-#include <getopt.h>
+#include <argp.h>
 #include <time.h>
 #include <errno.h>
 #include <assert.h>
@@ -237,6 +237,43 @@ void generate_matrix(
 	vslDeleteStream(&stream);
 }
 
+/* argument parsing */
+
+const char *argp_program_bug_address =
+	"https://github.com/j000/diagonalization";
+
+/* Used by main to communicate with parse_opt. */
+struct arguments {
+	size_t size;
+	char *filename_input;
+};
+
+/* Parse a single option. */
+static error_t parse_opt(int key, char *arg, struct argp_state *state) {
+	/* Get the input argument from argp_parse, which we
+	 * know is a pointer to our arguments structure. */
+	struct arguments *arguments = state->input;
+
+	switch (key) {
+	case 'h':
+		argp_state_help(state, state->out_stream, ARGP_HELP_STD_HELP);
+		break;
+	case 'f':
+		arguments->filename_input = arg;
+		break;
+	case 's': {
+			size_t tmp = 0;
+
+			if (1 == sscanf(arg, "%zu", &tmp))
+				arguments->size = tmp;
+			break;
+		}
+	default:
+		return ARGP_ERR_UNKNOWN;
+	}
+	return 0;
+}
+
 int main(int argc, char **argv) {
 	size_t size = 10;
 	double *matrix;
@@ -249,68 +286,34 @@ int main(int argc, char **argv) {
 
 	/* option parsing */
 	{
-		extern int opterr;
+		static struct arguments arguments;
 
-		opterr = 0;
-		while (1) {
-			/* getopt_long stores the option index here. */
-			int option_index = 0;
-			char c;
-			static struct option long_options[] = {
-				{ "file", required_argument, 0, 'f' },
-				{ "size", required_argument, 0, 's' },
-				{ 0, 0, 0, 0 }
-			};
+		/* Program documentation. */
+		static char doc[] = "Diagonalizacja macierzy" \
+			"\vWhen FILE is '-', write to standard output.";
 
-			c = getopt_long(
-				argc,
-				argv,
-				"f:s:",
-				long_options,
-				&option_index
-				);
+		/* A description of the arguments we accept. */
+		/* static char args_doc[] = ""; */
 
-			/* Detect the end of the options. */
-			if (c == -1)
-				break;
+		/* The options we understand. */
+		static struct argp_option options[] = {
+			{ "size", 's', "N", 0, "Size of matrix to generate", 0 },
+			{ "file", 'f', "FILE", 0, "Write input matrix to FILE\n", 1 },
+			{ NULL, 'h', 0, OPTION_HIDDEN, NULL, -1 }, /* support -h */
+			{ 0 }
+		};
 
-			switch (c) {
-			case 'f': {
-					size_t length = strlen(optarg);
+		/* Our argp parser. */
+		static struct argp argp =
+		{ options, parse_opt, NULL /* args_doc */, doc, NULL, NULL, NULL };
 
-					if (filename != NULL)
-						my_free(filename);
-					filename = my_calloc(length + 1, sizeof(*filename));
-					strncpy(filename, optarg, length);
-					break;
-				}
+		/* Parse our arguments; every option seen by parse_opt will
+		 *      be reflected in arguments. */
+		argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
-			case 's': {
-					size_t tmp = 0;
-
-					if (1 == sscanf(optarg, "%zu", &tmp))
-						size = tmp;
-					break;
-				}
-
-			case '?':
-				fprintf(stderr, "Unknown option %d\n", optopt);
-				exit(EXIT_FAILURE);
-				break;
-
-			default:
-				fprintf(stderr, "Unexpected result from getopt_long\n");
-				exit(EXIT_FAILURE);
-			}
-		}
-
-		/* Print any remaining command line arguments (not options). */
-		if (optind < argc) {
-			fprintf(stderr, "Unknown arguments: ");
-			while (optind < argc)
-				printf("%s\n", argv[optind++]);
-			exit(EXIT_FAILURE);
-		}
+		filename = arguments.filename_input;
+		if (arguments.size > 0)
+			size = arguments.size;
 
 		printf("\n");
 		printf("Generating matrix %zux%zu.\n", size, size);
