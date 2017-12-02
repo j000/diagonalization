@@ -1,4 +1,4 @@
-SRC ?= main.c
+SRC ?= diagonalization.c
 
 SRCDIR ?= .
 OBJDIR ?= .objdir
