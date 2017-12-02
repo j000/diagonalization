@@ -174,11 +174,65 @@ void *write_matrix(void *arg_struct) {
 	return NULL;
 }
 
+/* **** */
+
+void generate_matrix(
+	double **matrix,
+	size_t size,
+	double sigma,
+	int_fast32_t seed
+) {
+	VSLStreamStatePtr stream = NULL;
+
+	if (seed == 0) /* get random seed */
+		if (getrandom(&seed, sizeof(seed), 0) == -1) {
+			fprintf(stderr, "getrandom() failed.\n");
+			/* manually read /dev/urandom */
+			FILE *urandom = fopen("/dev/urandom", "r");
+			if (urandom == NULL	|| fread(&seed, sizeof(seed), 1, urandom) < 1) {
+				fprintf(
+					stderr,
+					"Something went wrong while opening /dev/urandom.\n"
+				);
+				exit(EXIT_FAILURE);
+			}
+			fclose(urandom);
+		}
+
+	/* initialize random stream */
+	{
+		MKL_INT status = vslNewStream(&stream, VSL_BRNG_MT19937, seed);
+
+		if (status != VSL_STATUS_OK) {
+			fprintf(
+				stderr,
+				"Cannot create new random stream. Error %" MKL_FORMAT ".\n",
+				status
+			);
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	*matrix = my_calloc(size * size, sizeof(**matrix));
+
+	/* generate less random numbers
+	 * we only need one triangle.
+	 * Also it should be faster than: */
+	/* gaussian(matrix, size*size, sigma); */
+	for (size_t i = 0; i < size; i++)
+		gaussian(&(*matrix)[i * (size + 1)], size - i, sigma, stream);
+
+	/* make symmetrical */
+	for (size_t i = 1; i < size; ++i)
+		for (size_t j = 0; j < i; ++j)
+			(*matrix)[i * size + j] = (*matrix)[j * size + i];
+
+	vslDeleteStream(&stream);
+}
+
 int main(int argc, char **argv) {
 	size_t size = 10;
 	double *matrix;
-	VSLStreamStatePtr stream = NULL;
-	int_fast32_t seed = 0;
 	pthread_t writer;
 	char *filename = NULL;
 
@@ -264,50 +318,9 @@ int main(int argc, char **argv) {
 
 	timer("Parsing options");
 
-	if (seed == 0) /* get random seed */
-		if (getrandom(&seed, sizeof(seed), 0) == -1) {
-			fprintf(stderr, "getrandom() failed.\n");
-			/* manually read /dev/urandom */
-			FILE *urandom = fopen("/dev/urandom", "r");
-			if (urandom == NULL	|| fread(&seed, sizeof(seed), 1, urandom) < 1) {
-				fprintf(
-					stderr,
-					"Something went wrong while opening /dev/urandom.\n"
-				);
-				exit(EXIT_FAILURE);
-			}
-			fclose(urandom);
-		}
-
-	/* initialize random stream */
-	{
-		MKL_INT status = vslNewStream(&stream, VSL_BRNG_MT19937, seed);
-
-		if (status != VSL_STATUS_OK) {
-			fprintf(
-				stderr,
-				"Cannot create new random stream. Error %" MKL_FORMAT ".\n",
-				status
-			);
-			exit(EXIT_FAILURE);
-		}
-	}
-
-	matrix = my_calloc(size * size, sizeof(*matrix));
-
-	/* generate less random numbers
-	 * we only need one triangle.
-	 * Also it should be faster than: */
-	/* gaussian(matrix, size*size, sqrt(size)); */
-	for (size_t i = 0; i < size; i++)
-		gaussian(&matrix[i * (size + 1)], size - i, size, stream);
+	generate_matrix(&matrix, size, size, 0);
 
 	timer("Generating");
-
-	/* make symmetrical */
-	for (size_t i = 1; i < size; ++i)
-		for (size_t j = 0; j < i; ++j)
-			matrix[i * size + j] = matrix[j * size + i];
 
 	{
 		struct arguments *args = my_calloc(1, sizeof(*args));
@@ -379,7 +392,6 @@ int main(int argc, char **argv) {
 
 	/* **** */
 
-	vslDeleteStream(&stream);
 	mkl_free_buffers();
 	mkl_finalize();
 	my_free(matrix);
