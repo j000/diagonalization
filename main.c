@@ -147,7 +147,10 @@ void *write_matrix(void *arg_struct) {
 	struct arguments *args = (struct arguments *)arg_struct;
 	FILE *output;
 
-	if (args->filename == NULL) {
+	if (args->filename == NULL)
+		return NULL;
+
+	if (strcmp(args->filename, "-") == 0) {
 		output = stdout;
 	} else {
 		output = fopen(args->filename, "w");
@@ -165,7 +168,7 @@ void *write_matrix(void *arg_struct) {
 		fprintf(output, "\n");
 	}
 
-	if (args->filename != NULL)
+	if (output != stdout)
 		fclose(output);
 	my_free(arg_struct);
 
@@ -308,8 +311,13 @@ int main(int argc, char **argv) {
 
 		printf("\n");
 		printf("Generating matrix %zux%zu.\n", size, size);
-		if (filename != NULL)
-			printf("Writing input matrix into file %s.\n", filename);
+		if (filename != NULL) {
+			printf("Writing input matrix into ");
+			if (strcmp(filename, "-") != 0)
+				printf("file %s.\n", filename);
+			else
+				printf("stdout.\n");
+		}
 		printf("\n");
 	}
 
