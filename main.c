@@ -75,6 +75,7 @@ void print_timer(const char *text, bool reset_delta) {
 		if (clock_gettime(CLOCK_MONOTONIC_RAW, &start) == -1)
 			return;
 		last = start;
+		return;
 	}
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &tmp);
@@ -137,14 +138,17 @@ void gaussian(
 
 /* thread stuff */
 
-struct arguments {
+/**
+ * Helps with passing arguments to threads.
+ */
+struct thread_arguments {
 	double *matrix;
 	size_t size;
 	char *filename;
 };
 
 void *write_matrix(void *arg_struct) {
-	struct arguments *args = (struct arguments *)arg_struct;
+	struct thread_arguments *args = (struct thread_arguments *)arg_struct;
 	FILE *output;
 
 	if (args->filename == NULL)
@@ -239,10 +243,9 @@ int main(int argc, char **argv) {
 	pthread_t writer;
 	char *filename = NULL;
 
-	timer("Start");
-
-	assert(size * size * sizeof(*matrix) <= SIZE_MAX);
 	assert(sizeof(MKL_INT) == sizeof(size_t));
+
+	timer("Start");
 
 	/* option parsing */
 	{
@@ -321,6 +324,8 @@ int main(int argc, char **argv) {
 		printf("\n");
 	}
 
+	assert(size * size * sizeof(*matrix) <= SIZE_MAX);
+
 	/* mkl_disable_fast_mm(); */
 	mkl_peak_mem_usage(MKL_PEAK_MEM_ENABLE);
 
@@ -331,7 +336,7 @@ int main(int argc, char **argv) {
 	timer("Generating");
 
 	{
-		struct arguments *args = my_calloc(1, sizeof(*args));
+		struct thread_arguments *args = my_calloc(1, sizeof(*args));
 
 		args->matrix = matrix;
 		args->size = size;
