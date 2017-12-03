@@ -151,11 +151,12 @@ void gaussian(
  */
 struct thread_arguments {
 	double *matrix;
+	double *vector;
 	size_t size;
 	char *filename;
 };
 
-void *write_matrix(void *arg_struct) {
+void *write_input(void *arg_struct) {
 	struct thread_arguments *args = (struct thread_arguments *)arg_struct;
 	FILE *output;
 
@@ -168,7 +169,7 @@ void *write_matrix(void *arg_struct) {
 		output = fopen(args->filename, "w");
 		if (output == NULL) {
 			fprintf(stderr, "Uname to open %s for writing.\n", args->filename);
-			fprintf(stderr, "INPUT MATRIX WILL NOT BE WRITTEN!\n");
+			fprintf(stderr, "/!\\ INPUT MATRIX WILL NOT BE WRITTEN /!\\\n");
 			return NULL;
 		}
 	}
@@ -182,6 +183,46 @@ void *write_matrix(void *arg_struct) {
 
 	if (output != stdout)
 		fclose(output);
+
+	my_free(arg_struct);
+
+	timer_no_delta("Writing");
+
+	return NULL;
+}
+
+void *write_result(void *arg_struct) {
+	struct thread_arguments *args = (struct thread_arguments *)arg_struct;
+	FILE *output;
+
+	if (args->filename == NULL)
+		return NULL;
+
+	if (strcmp(args->filename, "-") == 0) {
+		output = stdout;
+	} else {
+		output = fopen(args->filename, "w");
+		if (output == NULL) {
+			fprintf(stderr, "Uname to open %s for writing.\n", args->filename);
+			fprintf(stderr, "/!\\ RESULTS WILL NOT BE WRITTEN /!\\\n");
+			return NULL;
+		}
+	}
+
+	fprintf(output, "%zu\n", args->size);
+	for (size_t i = 0; i < args->size; ++i)
+		fprintf(output, "%16.9e ", args->vector[i]);
+	fprintf(output, "\n");
+
+	for (size_t i = 0; i < args->size; ++i) {
+		for (size_t j = 0; j < args->size; ++j)
+			fprintf(output, "%16.9e ", args->matrix[i * args->size + j]);
+		fprintf(output, "\n");
+	}
+
+	if (output != stdout)
+		fclose(output);
+
 	my_free(arg_struct);
 
 	timer_no_delta("Writing");
@@ -267,6 +308,7 @@ const char *argp_program_bug_address =
 struct arguments {
 	size_t size;
 	char *input_filename;
+	char *output_filename;
 	bool sigma_is_inverse;
 };
 
@@ -286,6 +328,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 		break;
 	case 'f':
 		arguments->input_filename = arg;
+		break;
+	case 'o':
+		arguments->output_filename = arg;
 		break;
 	case 's': {
 			size_t tmp = 0;
@@ -320,6 +365,7 @@ int main(int argc, char **argv) {
 	size_t writer_count = 0;
 	pthread_t writer[4];
 	char *input_filename = NULL;
+	char *output_filename = NULL;
 
 	assert(sizeof(MKL_INT) == sizeof(size_t));
 
@@ -331,6 +377,7 @@ int main(int argc, char **argv) {
 		static struct arguments arguments = {
 			.size = 10,
 			.input_filename = NULL,
+			.output_filename = NULL,
 			.sigma_is_inverse = false,
 		};
 
@@ -342,6 +389,8 @@ int main(int argc, char **argv) {
 		static struct argp_option options[] = {
 			{ "size", 's', "N", 0, "Size of matrix to generate", 0 },
 			{ "file", 'f', "FILE", 0, "Write input matrix to FILE", 1 },
+			{ "output", 'o', "FILE", 0,
+				"Write eigenvalues and right eigenvectors to FILE", 1 },
 			{ "sigma-1-n", OPT_SIGMA_1_N, 0, 0, "Sigma equals 1/size", 2 },
 			{ "inverse", 'i', 0, OPTION_ALIAS, 0, 0 },
 			{ "sigma-n", OPT_SIGMA_N, 0, 0, "Sigma equals size (default)", 0 },
@@ -361,6 +410,7 @@ int main(int argc, char **argv) {
 		argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
 		input_filename = arguments.input_filename;
+		output_filename = arguments.output_filename;
 		if (arguments.size > 0)
 			size = arguments.size;
 		if (arguments.sigma_is_inverse == true)
@@ -379,6 +429,13 @@ int main(int argc, char **argv) {
 				printf("Writing input matrix into ");
 				if (strcmp(input_filename, "-") != 0)
 					printf("file %s.\n", input_filename);
+				else
+					printf("stdout.\n");
+			}
+			if (output_filename != NULL) {
+				printf("Writing resutls into ");
+				if (strcmp(output_filename, "-") != 0)
+					printf("file %s.\n", output_filename);
 				else
 					printf("stdout.\n");
 			}
@@ -408,13 +465,13 @@ int main(int argc, char **argv) {
 		if (pthread_create(
 			&writer[writer_count++],
 			NULL,
-			write_matrix,
+			write_input,
 			args
 			) != 0) {
 			fprintf(stderr, "Error creating thread. Writing in main thread.\n");
 			--writer_count;
 			timer("Writing");
-			write_matrix(args);
+			write_input(args);
 			/* exit(EXIT_FAILURE); */
 		}
 
@@ -477,6 +534,30 @@ int main(int argc, char **argv) {
 
 	timer("Computing");
 
+	if (output_filename != NULL) {
+		struct thread_arguments *args = my_calloc(1, sizeof(*args));
+
+		args->size = size;
+		args->matrix = X;
+		args->vector = E;
+		args->filename = output_filename;
+
+		/* create writer thread */
+		if (pthread_create(
+			&writer[writer_count++],
+			NULL,
+			write_result,
+			args
+			) != 0) {
+			fprintf(stderr, "Error creating thread. Writing in main thread.\n");
+			--writer_count;
+			timer("Writing");
+			write_result(args);
+			/* exit(EXIT_FAILURE); */
+		}
+
+		timer("Starting thread");
+	}
 	/* **** */
 
 	mkl_free_buffers();
