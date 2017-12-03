@@ -26,6 +26,7 @@
 
 /* global variables */
 bool quiet = false;     /**< set to true to suppress output */
+bool symmetric = false; /**< set to true to do calculations on symmetric matrix */
 
 /* **** */
 
@@ -190,10 +191,20 @@ void *write_matrix(void *arg_struct) {
 
 /* **** */
 
-void generate_symmetric_matrix(
+/**
+ * Generate random matrix. Use Gaussian distribution with params (0, sigma).
+ *
+ * @param[out] matrix Pointer to generated matrix.
+ * @param[in] size Matrix size.
+ * @param[in] sigma Sigma in Gaussian distribution.
+ * @param[in] is_symmetric If true: generated matrix will be symmetric.
+ * @param[in] seed Random seed to use. Generate new seed when 0.
+ */
+void generate_matrix(
 	double **matrix,
 	size_t size,
 	double sigma,
+	bool is_symmetric,
 	int_fast32_t seed
 ) {
 	VSLStreamStatePtr stream = NULL;
@@ -229,17 +240,20 @@ void generate_symmetric_matrix(
 
 	*matrix = my_calloc(size * size, sizeof(**matrix));
 
-	/* generate less random numbers
-	 * we only need one triangle.
-	 * Also it should be faster than: */
-	/* gaussian(matrix, size*size, sigma); */
-	for (size_t i = 0; i < size; i++)
-		gaussian(&(*matrix)[i * (size + 1)], size - i, sigma, stream);
+	if (is_symmetric) {
+		/* generate less random numbers
+		 * we only need one triangle.
+		 * also it should be faster. */
+		for (size_t i = 0; i < size; i++)
+			gaussian(&(*matrix)[i * (size + 1)], size - i, sigma, stream);
 
-	/* make symmetrical */
-	for (size_t i = 1; i < size; ++i)
-		for (size_t j = 0; j < i; ++j)
-			(*matrix)[i * size + j] = (*matrix)[j * size + i];
+		/* make symmetrical */
+		for (size_t i = 1; i < size; ++i)
+			for (size_t j = 0; j < i; ++j)
+				(*matrix)[i * size + j] = (*matrix)[j * size + i];
+	} else {
+		gaussian(*matrix, size * size, sigma, stream);
+	}
 
 	vslDeleteStream(&stream);
 }
@@ -258,6 +272,7 @@ struct arguments {
 
 #define OPT_SIGMA_N 1
 #define OPT_SIGMA_1_N 2
+#define OPT_SYMMETRIC 3
 
 /* Parse a single option. */
 static error_t parse_opt(int key, char *arg, struct argp_state *state) {
@@ -279,6 +294,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 				arguments->size = tmp;
 			break;
 		}
+	case OPT_SYMMETRIC:
+		symmetric = true;
+		break;
 	case 'q':
 		quiet = true;
 		break;
@@ -324,9 +342,11 @@ int main(int argc, char **argv) {
 		static struct argp_option options[] = {
 			{ "size", 's', "N", 0, "Size of matrix to generate", 0 },
 			{ "file", 'f', "FILE", 0, "Write input matrix to FILE", 1 },
-			{ "sigma-n", OPT_SIGMA_N, 0, 0, "Sigma equals size (default)", 0 },
-			{ "sigma-1-n", OPT_SIGMA_1_N, 0, 0, "Sigma equals 1/size", 0 },
+			{ "sigma-1-n", OPT_SIGMA_1_N, 0, 0, "Sigma equals 1/size", 2 },
 			{ "inverse", 'i', 0, OPTION_ALIAS, 0, 0 },
+			{ "sigma-n", OPT_SIGMA_N, 0, 0, "Sigma equals size (default)", 0 },
+			{ "symmetric", OPT_SYMMETRIC, 0, 0, "Generate symmetric matrix",
+				0 },
 			{ "quiet", 'q', 0, 0, "Supress output", -1 },
 			{ NULL, 'h', 0, OPTION_HIDDEN, NULL, -1 }, /* support -h */
 			{ 0 }
@@ -349,7 +369,10 @@ int main(int argc, char **argv) {
 			sigma = size;
 
 		if (!quiet) {
-			printf("Generating matrix %zux%zu.\n", size, size);
+			printf("Generating ");
+			if (symmetric)
+				printf("symmetric ");
+			printf("matrix %zux%zu.\n", size, size);
 			if (arguments.sigma_is_inverse == true)
 				printf("Sigma: %.6f\n", sigma);
 			if (input_filename != NULL) {
@@ -370,7 +393,7 @@ int main(int argc, char **argv) {
 
 	timer("Parsing options");
 
-	generate_symmetric_matrix(&matrix, size, size, 0);
+	generate_matrix(&matrix, size, size, symmetric, 0);
 
 	timer("Generating");
 
