@@ -172,6 +172,7 @@ struct thread_arguments {
 	double *vector;
 	size_t size;
 	char *filename;
+	bool binary;
 };
 
 void *write_input(void *arg_struct) {
@@ -192,11 +193,21 @@ void *write_input(void *arg_struct) {
 		}
 	}
 
-	fprintf(output, "%zu\n", args->size);
-	for (size_t i = 0; i < args->size; ++i) {
-		for (size_t j = 0; j < args->size; ++j)
-			fprintf(output, "%16.9e ", args->matrix[i * args->size + j]);
-		fprintf(output, "\n");
+	if (args->binary) {
+		fwrite(&args->size, sizeof(args->size), 1, output);
+		fwrite(
+			args->matrix,
+			sizeof(args->matrix[0]),
+			args->size * args->size,
+			output
+		);
+	} else {
+		fprintf(output, "%zu\n", args->size);
+		for (size_t i = 0; i < args->size; ++i) {
+			for (size_t j = 0; j < args->size; ++j)
+				fprintf(output, "%16.9e ", args->matrix[i * args->size + j]);
+			fprintf(output, "\n");
+		}
 	}
 
 	if (output != stdout)
@@ -227,15 +238,26 @@ void *write_result(void *arg_struct) {
 		}
 	}
 
-	fprintf(output, "%zu\n", args->size);
-	for (size_t i = 0; i < args->size; ++i)
-		fprintf(output, "%16.9e ", args->vector[i]);
-	fprintf(output, "\n");
-
-	for (size_t i = 0; i < args->size; ++i) {
-		for (size_t j = 0; j < args->size; ++j)
-			fprintf(output, "%16.9e ", args->matrix[i * args->size + j]);
+	if (args->binary) {
+		fwrite(&args->size, sizeof(args->size), 1, output);
+		fwrite(args->vector, sizeof(args->vector[0]), args->size, output);
+		fwrite(
+			args->matrix,
+			sizeof(args->matrix[0]),
+			args->size * args->size,
+			output
+		);
+	} else {
+		fprintf(output, "%zu\n", args->size);
+		for (size_t i = 0; i < args->size; ++i)
+			fprintf(output, "%16.9e ", args->vector[i]);
 		fprintf(output, "\n");
+
+		for (size_t i = 0; i < args->size; ++i) {
+			for (size_t j = 0; j < args->size; ++j)
+				fprintf(output, "%16.9e ", args->matrix[i * args->size + j]);
+			fprintf(output, "\n");
+		}
 	}
 
 	if (output != stdout)
@@ -326,7 +348,9 @@ const char *argp_program_bug_address =
 struct arguments {
 	size_t size;
 	char *input_filename;
+	char *input_binary_filename;
 	char *output_filename;
+	char *output_binary_filename;
 	bool sigma_is_inverse;
 };
 
@@ -347,8 +371,14 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 	case 'f':
 		arguments->input_filename = arg;
 		break;
+	case 'b':
+		arguments->input_binary_filename = arg;
+		break;
 	case 'o':
 		arguments->output_filename = arg;
+		break;
+	case 'd':
+		arguments->output_binary_filename = arg;
 		break;
 	case 's': {
 			size_t tmp = 0;
@@ -381,7 +411,9 @@ int main(int argc, char **argv) {
 	double *matrix = NULL;
 	double sigma = 0;
 	char *input_filename = NULL;
+	char *input_binary_filename = NULL;
 	char *output_filename = NULL;
+	char *output_binary_filename = NULL;
 
 	assert(sizeof(MKL_INT) == sizeof(size_t));
 
@@ -393,6 +425,7 @@ int main(int argc, char **argv) {
 		static struct arguments arguments = {
 			.size = 10,
 			.input_filename = NULL,
+			.input_binary_filename = NULL,
 			.output_filename = NULL,
 			.sigma_is_inverse = false,
 		};
@@ -403,15 +436,21 @@ int main(int argc, char **argv) {
 
 		/* The options we understand. */
 		static struct argp_option options[] = {
-			{ "size", 's', "N", 0, "Size of matrix to generate", 0 },
-			{ "file", 'f', "FILE", 0, "Write input matrix to FILE", 1 },
+			{ "size", 's', "N", 0, "Size of matrix to generate", 1 },
+			{ "file", 'f', "FILE", 0, "Write input matrix to FILE", 2 },
+			{ "binary", 'b', "FILE", 0,
+				"Write input matrix in binary format to FILE",
+				3 },
 			{ "output", 'o', "FILE", 0,
-				"Write eigenvalues and right eigenvectors to FILE", 1 },
-			{ "sigma-1-n", OPT_SIGMA_1_N, 0, 0, "Sigma equals 1/size", 2 },
+				"Write eigenvalues and right eigenvectors to FILE", 4 },
+			{ "dump-results", 'd', "FILE", 0,
+				"Write eigenvalues and right eigenvectors in binary format to FILE",
+				5 },
+			{ "sigma-1-n", OPT_SIGMA_1_N, 0, 0, "Sigma equals 1/size", 6 },
 			{ "inverse", 'i', 0, OPTION_ALIAS, 0, 0 },
-			{ "sigma-n", OPT_SIGMA_N, 0, 0, "Sigma equals size (default)", 0 },
+			{ "sigma-n", OPT_SIGMA_N, 0, 0, "Sigma equals size (default)", 7 },
 			{ "symmetric", OPT_SYMMETRIC, 0, 0, "Generate symmetric matrix",
-				0 },
+				8 },
 			{ "quiet", 'q', 0, 0, "Supress output", -1 },
 			{ NULL, 'h', 0, OPTION_HIDDEN, NULL, -1 }, /* support -h */
 			{ 0 }
@@ -426,7 +465,9 @@ int main(int argc, char **argv) {
 		argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
 		input_filename = arguments.input_filename;
+		input_binary_filename = arguments.input_binary_filename;
 		output_filename = arguments.output_filename;
+		output_binary_filename = arguments.output_binary_filename;
 		if (arguments.size > 0)
 			size = arguments.size;
 		if (arguments.sigma_is_inverse == true)
@@ -448,10 +489,24 @@ int main(int argc, char **argv) {
 				else
 					printf("stdout.\n");
 			}
+			if (input_binary_filename != NULL) {
+				printf("Writing input matrix in binary format into ");
+				if (strcmp(input_binary_filename, "-") != 0)
+					printf("file %s.\n", input_binary_filename);
+				else
+					printf("stdout.\n");
+			}
 			if (output_filename != NULL) {
 				printf("Writing resutls into ");
 				if (strcmp(output_filename, "-") != 0)
 					printf("file %s.\n", output_filename);
+				else
+					printf("stdout.\n");
+			}
+			if (output_binary_filename != NULL) {
+				printf("Writing resutls in binary format into ");
+				if (strcmp(output_binary_filename, "-") != 0)
+					printf("file %s.\n", output_binary_filename);
 				else
 					printf("stdout.\n");
 			}
@@ -481,6 +536,16 @@ int main(int argc, char **argv) {
 		create_writer_thread(write_input, args);
 	}
 
+	if (input_binary_filename != NULL) {
+		struct thread_arguments *args = my_calloc(1, sizeof(*args));
+
+		args->matrix = matrix;
+		args->size = size;
+		args->filename = input_binary_filename;
+		args->binary = true;
+
+		/* create writer thread */
+		create_writer_thread(write_input, args);
 	}
 
 	/* **** */
@@ -550,6 +615,20 @@ int main(int argc, char **argv) {
 		/* create writer thread */
 		create_writer_thread(write_result, args);
 	}
+
+	if (output_binary_filename != NULL) {
+		struct thread_arguments *args = my_calloc(1, sizeof(*args));
+
+		args->size = size;
+		args->matrix = X;
+		args->vector = E;
+		args->filename = output_binary_filename;
+		args->binary = true;
+
+		/* create writer thread */
+		create_writer_thread(write_result, args);
+	}
+
 	/* **** */
 
 	mkl_free_buffers();
