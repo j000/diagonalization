@@ -246,7 +246,11 @@ const char *argp_program_bug_address =
 struct arguments {
 	size_t size;
 	char *input_filename;
+	bool sigma_is_inverse;
 };
+
+#define OPT_SIGMA_N 1
+#define OPT_SIGMA_1_N 2
 
 /* Parse a single option. */
 static error_t parse_opt(int key, char *arg, struct argp_state *state) {
@@ -268,6 +272,14 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 				arguments->size = tmp;
 			break;
 		}
+	case OPT_SIGMA_N: {
+			arguments->sigma_is_inverse = false;
+			break;
+		}
+	case OPT_SIGMA_1_N: {
+			arguments->sigma_is_inverse = true;
+			break;
+		}
 	default:
 		return ARGP_ERR_UNKNOWN;
 	}
@@ -278,6 +290,7 @@ int main(int argc, char **argv) {
 	size_t size = 10;
 	double *matrix = NULL;
 	pthread_t writer;
+	double sigma = 0;
 	char *filename = NULL;
 
 	assert(sizeof(MKL_INT) == sizeof(size_t));
@@ -290,6 +303,7 @@ int main(int argc, char **argv) {
 		static struct arguments arguments = {
 			.size = 10,
 			.input_filename = NULL,
+			.sigma_is_inverse = false,
 		};
 
 		/* Program documentation. */
@@ -300,6 +314,8 @@ int main(int argc, char **argv) {
 		static struct argp_option options[] = {
 			{ "size", 's', "N", 0, "Size of matrix to generate", 0 },
 			{ "file", 'f', "FILE", 0, "Write input matrix to FILE", 1 },
+			{ "sigma-n", OPT_SIGMA_N, 0, 0, "Sigma equals size (default)", 0 },
+			{ "sigma-1-n", OPT_SIGMA_1_N, 0, 0, "Sigma equals 1/size", 0 },
 			{ NULL, 'h', 0, OPTION_HIDDEN, NULL, -1 }, /* support -h */
 			{ 0 }
 		};
@@ -318,6 +334,11 @@ int main(int argc, char **argv) {
 
 		printf("\n");
 		printf("Generating matrix %zux%zu.\n", size, size);
+		if (arguments.sigma_is_inverse == true)
+			sigma = 1. / size;
+		else
+			sigma = size;
+		printf("Sigma: %f\n", sigma);
 		if (filename != NULL) {
 			printf("Writing input matrix into ");
 			if (strcmp(filename, "-") != 0)
