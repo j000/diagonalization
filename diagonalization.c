@@ -289,8 +289,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 int main(int argc, char **argv) {
 	size_t size = 10;
 	double *matrix = NULL;
-	pthread_t writer;
 	double sigma = 0;
+	size_t writer_count = 0;
+	pthread_t writer[4];
 	char *filename = NULL;
 
 	assert(sizeof(MKL_INT) == sizeof(size_t));
@@ -368,8 +369,14 @@ int main(int argc, char **argv) {
 		args->filename = filename;
 
 		/* create writer thread */
-		if (pthread_create(&writer, NULL, write_matrix, args) != 0) {
+		if (pthread_create(
+			&writer[writer_count++],
+			NULL,
+			write_matrix,
+			args
+			) != 0) {
 			fprintf(stderr, "Error creating thread. Writing in main thread.\n");
+			--writer_count;
 			timer("Writing");
 			write_matrix(args);
 			/* exit(EXIT_FAILURE); */
@@ -447,5 +454,8 @@ int main(int argc, char **argv) {
 			);
 		}
 	}
-	pthread_join(writer, NULL);
+
+	/* wait for threads */
+	for (size_t i = 0; i < writer_count; ++i)
+		pthread_join(writer[i], NULL);
 }
