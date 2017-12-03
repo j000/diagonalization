@@ -439,9 +439,9 @@ int main(int argc, char **argv) {
 	/* **** */
 
 	mkl_free_buffers();
-	mkl_finalize();
 	my_free(matrix);
 
+#ifdef _DEBUG
 	{
 		int N_AllocatedBuffers;
 		size_t AllocatedBytes = mkl_mem_stat(&N_AllocatedBuffers);
@@ -455,6 +455,7 @@ int main(int argc, char **argv) {
 			);
 		}
 	}
+#endif /* ifdef _DEBUG */
 
 	/* wait for threads */
 	for (size_t i = 0; i < writer_count; ++i)
