@@ -629,9 +629,85 @@ int main(int argc, char **argv) {
 		create_writer_thread(write_result, args);
 	}
 
+	/* wait for threads */
+	for (size_t i = 0; i < writer_count; ++i)
+		pthread_join(writer[i], NULL);
+
+	timer("Waiting for threads");
+
+	/* **** */
+
+	{
+		char normal = 'N';
+		double one = 1.0;
+		double zero = 0.0;
+		double *tmp = my_calloc(size * size, sizeof(*tmp));
+		/* create matrix with eigenvalues on diagonal */
+		/* ident = I*E */
+		double *ident = my_calloc(size * size, sizeof(*ident));
+
+		for (size_t i = 0; i < size; ++i)
+			ident[i * size + i] = E[i];
+
+		/* tmp = P*D */
+		dgemm(
+			&normal,          /* 'N', non-transposed */
+			&normal,          /* 'N', non-transposed */
+			(MKL_INT *)&size, /* Number of rows in destination */
+			(MKL_INT *)&size, /* Number of columns in matrix #1 */
+			(MKL_INT *)&size, /* Number of columns in destination */
+			&one,             /* alpha = 1.0 */
+			X,                /* Source #1 for GEMM */
+			(MKL_INT *)&size, /* Leading dimension of Source 1 */
+			ident,            /* Source #2 for GEMM */
+			(MKL_INT *)&size, /* Leading dimension of Source 2 */
+			&zero,            /* beta = 0.0 */
+			tmp,              /* out: Destination */
+			(MKL_INT *)&size  /* Leading dimension of Destination */
+		);
+
+		/* ident = A*P */
+		dgemm(
+			&normal,          /* 'N', non-transposed */
+			&normal,          /* 'N', non-transposed */
+			(MKL_INT *)&size, /* Number of rows in destination */
+			(MKL_INT *)&size, /* Number of columns in matrix #1 */
+			(MKL_INT *)&size, /* Number of columns in destination */
+			&one,             /* alpha = 1.0 */
+			matrix,           /* Source #1 for GEMM */
+			(MKL_INT *)&size, /* Leading dimension of Source 1 */
+			X,                /* Source #2 for GEMM */
+			(MKL_INT *)&size, /* Leading dimension of Source 2 */
+			&zero,            /* beta = 0.0 */
+			ident,            /* out: Destination */
+			(MKL_INT *)&size  /* Leading dimension of Destination */
+		);
+
+		double max = 0.;
+		double error = 0.;
+
+		for (size_t i = 0; i < size; ++i)
+			for (size_t j = 0; j < size; ++j) {
+				double t = abs(tmp[i * size + j] - ident[i * size + j]);
+				if (t > max)
+					max = t;
+				error += t;
+			}
+
+		my_free(ident);
+		my_free(tmp);
+
+		printf("Max error: %16.9E\n", max);
+		printf("Sum of errors: %16.9E\n", error);
+		timer("Verifying");
+	}
+
 	/* **** */
 
 	mkl_free_buffers();
+	my_free(res);
+	my_free(E);
+	my_free(X);
 	my_free(matrix);
 
 #ifdef _DEBUG
@@ -649,8 +725,4 @@ int main(int argc, char **argv) {
 		}
 	}
 #endif /* ifdef _DEBUG */
-
-	/* wait for threads */
-	for (size_t i = 0; i < writer_count; ++i)
-		pthread_join(writer[i], NULL);
 }
