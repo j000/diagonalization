@@ -119,12 +119,12 @@ void gaussian(
 	/* Random number generator of normal (Gaussian) distribution with parameters a and s */
 	/* https://software.intel.com/en-us/node/590423 */
 	status = vdRngGaussian(
-		VSL_RNG_METHOD_GAUSSIAN_ICDF,
-		stream,
-		size,
-		buf,
-		0.0,
-		sigma
+			VSL_RNG_METHOD_GAUSSIAN_ICDF,
+			stream,
+			size,
+			buf,
+			0.0,
+			sigma
 		);
 	if (status != VSL_STATUS_OK) {
 		fprintf(
