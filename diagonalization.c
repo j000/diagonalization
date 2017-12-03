@@ -24,6 +24,9 @@
 #include <mkl_vsl.h>
 #include <mkl.h>
 
+/* global variables */
+bool quiet = false;     /**< set to true to suppress output */
+
 /* **** */
 
 /**
@@ -92,10 +95,14 @@ void print_timer(const char *text, bool reset_delta) {
 }
 
 void timer(const char *text) {
+	if (quiet)
+		return;
 	print_timer(text, true);
 }
 
 void timer_no_delta(const char *text) {
+	if (quiet)
+		return;
 	print_timer(text, false);
 }
 
@@ -272,14 +279,16 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 				arguments->size = tmp;
 			break;
 		}
-	case OPT_SIGMA_N: {
-			arguments->sigma_is_inverse = false;
-			break;
-		}
-	case OPT_SIGMA_1_N: {
-			arguments->sigma_is_inverse = true;
-			break;
-		}
+	case 'q':
+		quiet = true;
+		break;
+	case 'i':
+	case OPT_SIGMA_1_N:
+		arguments->sigma_is_inverse = true;
+		break;
+	case OPT_SIGMA_N:
+		arguments->sigma_is_inverse = false;
+		break;
 	default:
 		return ARGP_ERR_UNKNOWN;
 	}
@@ -292,7 +301,7 @@ int main(int argc, char **argv) {
 	double sigma = 0;
 	size_t writer_count = 0;
 	pthread_t writer[4];
-	char *filename = NULL;
+	char *input_filename = NULL;
 
 	assert(sizeof(MKL_INT) == sizeof(size_t));
 
@@ -317,6 +326,8 @@ int main(int argc, char **argv) {
 			{ "file", 'f', "FILE", 0, "Write input matrix to FILE", 1 },
 			{ "sigma-n", OPT_SIGMA_N, 0, 0, "Sigma equals size (default)", 0 },
 			{ "sigma-1-n", OPT_SIGMA_1_N, 0, 0, "Sigma equals 1/size", 0 },
+			{ "inverse", 'i', 0, OPTION_ALIAS, 0, 0 },
+			{ "quiet", 'q', 0, 0, "Supress output", -1 },
 			{ NULL, 'h', 0, OPTION_HIDDEN, NULL, -1 }, /* support -h */
 			{ 0 }
 		};
@@ -329,26 +340,27 @@ int main(int argc, char **argv) {
 		 *      be reflected in arguments. */
 		argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
-		filename = arguments.input_filename;
+		input_filename = arguments.input_filename;
 		if (arguments.size > 0)
 			size = arguments.size;
-
-		printf("Generating matrix %zux%zu.\n", size, size);
-		if (arguments.sigma_is_inverse == true) {
+		if (arguments.sigma_is_inverse == true)
 			sigma = 1. / size;
-			printf("Sigma: %.6f\n", sigma);
-		} else {
+		else
 			sigma = size;
-			printf("Sigma: %.0f\n", sigma);
+
+		if (!quiet) {
+			printf("Generating matrix %zux%zu.\n", size, size);
+			if (arguments.sigma_is_inverse == true)
+				printf("Sigma: %.6f\n", sigma);
+			if (input_filename != NULL) {
+				printf("Writing input matrix into ");
+				if (strcmp(input_filename, "-") != 0)
+					printf("file %s.\n", input_filename);
+				else
+					printf("stdout.\n");
+			}
+			printf("\n");
 		}
-		if (filename != NULL) {
-			printf("Writing input matrix into ");
-			if (strcmp(filename, "-") != 0)
-				printf("file %s.\n", filename);
-			else
-				printf("stdout.\n");
-		}
-		printf("\n");
 	}
 
 	assert(size * size * sizeof(*matrix) <= SIZE_MAX);
@@ -362,12 +374,12 @@ int main(int argc, char **argv) {
 
 	timer("Generating");
 
-	if (filename != NULL) {
+	if (input_filename != NULL) {
 		struct thread_arguments *args = my_calloc(1, sizeof(*args));
 
 		args->matrix = matrix;
 		args->size = size;
-		args->filename = filename;
+		args->filename = input_filename;
 
 		/* create writer thread */
 		if (pthread_create(
@@ -426,13 +438,19 @@ int main(int argc, char **argv) {
 	);
 
 	if (info != 0) {
-		printf("dfeast_syev error: %" MKL_FORMAT ".\n", info);
-		printf(
+		fprintf(stderr, "dfeast_syev error: %" MKL_FORMAT ".\n", info);
+		fprintf(
+			stderr,
 			"https://software.intel.com/en-us/mkl-developer-reference-c-extended-eigensolver-output-details\n"
 		);
 		return 1;
 	}
-	printf("%" MKL_FORMAT " eigenvalues found.\n", M);
+
+	if (M < (MKL_INT)size)
+		fprintf(stderr, "/!\\ NOT ENOUGH EIGENVALUES FOUND /!\\\n");
+
+	if (!quiet)
+		printf("%" MKL_FORMAT " eigenvalues found.\n", M);
 
 	timer("Computing");
 
