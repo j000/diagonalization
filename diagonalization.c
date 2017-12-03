@@ -25,8 +25,10 @@
 #include <mkl.h>
 
 /* global variables */
-bool quiet = false;     /**< set to true to suppress output */
-bool symmetric = false; /**< set to true to do calculations on symmetric matrix */
+static size_t writer_count = 0; /**< counts started threads */
+static pthread_t writer[4];     /**< array of threads ID */
+static bool quiet = false;      /**< set to true to suppress output */
+static bool symmetric = false;  /**< set to true to do calculations on symmetric matrix */
 
 /* **** */
 
@@ -145,6 +147,22 @@ void gaussian(
 }
 
 /* thread stuff */
+
+void create_writer_thread(void *function(void *), void *args) {
+	if (pthread_create(
+		&writer[writer_count++],
+		NULL,
+		function,
+		args
+		) != 0) {
+		fprintf(stderr, "Error creating thread. Writing in main thread.\n");
+		--writer_count;
+		timer("Writing");
+		function(args);
+	}
+
+	timer("Starting thread");
+}
 
 /**
  * Helps with passing arguments to threads.
@@ -362,8 +380,6 @@ int main(int argc, char **argv) {
 	size_t size = 10;
 	double *matrix = NULL;
 	double sigma = 0;
-	size_t writer_count = 0;
-	pthread_t writer[4];
 	char *input_filename = NULL;
 	char *output_filename = NULL;
 
@@ -462,20 +478,9 @@ int main(int argc, char **argv) {
 		args->filename = input_filename;
 
 		/* create writer thread */
-		if (pthread_create(
-			&writer[writer_count++],
-			NULL,
-			write_input,
-			args
-			) != 0) {
-			fprintf(stderr, "Error creating thread. Writing in main thread.\n");
-			--writer_count;
-			timer("Writing");
-			write_input(args);
-			/* exit(EXIT_FAILURE); */
-		}
+		create_writer_thread(write_input, args);
+	}
 
-		timer("Starting thread");
 	}
 
 	/* **** */
@@ -543,20 +548,7 @@ int main(int argc, char **argv) {
 		args->filename = output_filename;
 
 		/* create writer thread */
-		if (pthread_create(
-			&writer[writer_count++],
-			NULL,
-			write_result,
-			args
-			) != 0) {
-			fprintf(stderr, "Error creating thread. Writing in main thread.\n");
-			--writer_count;
-			timer("Writing");
-			write_result(args);
-			/* exit(EXIT_FAILURE); */
-		}
-
-		timer("Starting thread");
+		create_writer_thread(write_result, args);
 	}
 	/* **** */
 
