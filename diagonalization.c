@@ -183,7 +183,7 @@ void *write_matrix(void *arg_struct) {
 
 /* **** */
 
-void generate_matrix(
+void generate_symmetric_matrix(
 	double **matrix,
 	size_t size,
 	double sigma,
@@ -245,7 +245,7 @@ const char *argp_program_bug_address =
 /* Used by main to communicate with parse_opt. */
 struct arguments {
 	size_t size;
-	char *filename_input;
+	char *input_filename;
 };
 
 /* Parse a single option. */
@@ -259,7 +259,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 		argp_state_help(state, state->out_stream, ARGP_HELP_STD_HELP);
 		break;
 	case 'f':
-		arguments->filename_input = arg;
+		arguments->input_filename = arg;
 		break;
 	case 's': {
 			size_t tmp = 0;
@@ -276,7 +276,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 
 int main(int argc, char **argv) {
 	size_t size = 10;
-	double *matrix;
+	double *matrix = NULL;
 	pthread_t writer;
 	char *filename = NULL;
 
@@ -286,32 +286,33 @@ int main(int argc, char **argv) {
 
 	/* option parsing */
 	{
-		static struct arguments arguments;
+		/* initialize defaults */
+		static struct arguments arguments = {
+			.size = 10,
+			.input_filename = NULL,
+		};
 
 		/* Program documentation. */
 		static char doc[] = "Diagonalizacja macierzy" \
 			"\vWhen FILE is '-', write to standard output.";
 
-		/* A description of the arguments we accept. */
-		/* static char args_doc[] = ""; */
-
 		/* The options we understand. */
 		static struct argp_option options[] = {
 			{ "size", 's', "N", 0, "Size of matrix to generate", 0 },
-			{ "file", 'f', "FILE", 0, "Write input matrix to FILE\n", 1 },
+			{ "file", 'f', "FILE", 0, "Write input matrix to FILE", 1 },
 			{ NULL, 'h', 0, OPTION_HIDDEN, NULL, -1 }, /* support -h */
 			{ 0 }
 		};
 
 		/* Our argp parser. */
 		static struct argp argp =
-		{ options, parse_opt, NULL /* args_doc */, doc, NULL, NULL, NULL };
+		{ options, parse_opt, NULL, doc, NULL, NULL, NULL };
 
 		/* Parse our arguments; every option seen by parse_opt will
 		 *      be reflected in arguments. */
 		argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
-		filename = arguments.filename_input;
+		filename = arguments.input_filename;
 		if (arguments.size > 0)
 			size = arguments.size;
 
@@ -334,20 +335,20 @@ int main(int argc, char **argv) {
 
 	timer("Parsing options");
 
-	generate_matrix(&matrix, size, size, 0);
+	generate_symmetric_matrix(&matrix, size, size, 0);
 
 	timer("Generating");
 
-	{
+	if (filename != NULL) {
 		struct thread_arguments *args = my_calloc(1, sizeof(*args));
 
 		args->matrix = matrix;
 		args->size = size;
 		args->filename = filename;
 
-		/* create a second thread */
+		/* create writer thread */
 		if (pthread_create(&writer, NULL, write_matrix, args) != 0) {
-			fprintf(stderr, "Error creating thread. Writing locally.\n");
+			fprintf(stderr, "Error creating thread. Writing in main thread.\n");
 			timer("Writing");
 			write_matrix(args);
 			/* exit(EXIT_FAILURE); */
