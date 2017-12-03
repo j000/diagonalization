@@ -308,7 +308,7 @@ int main(int argc, char **argv) {
 		};
 
 		/* Program documentation. */
-		static char doc[] = "Diagonalizacja macierzy" \
+		static char doc[] = "Matrix diagonalization." \
 			"\vWhen FILE is '-', write to standard output.";
 
 		/* The options we understand. */
@@ -333,13 +333,14 @@ int main(int argc, char **argv) {
 		if (arguments.size > 0)
 			size = arguments.size;
 
-		printf("\n");
 		printf("Generating matrix %zux%zu.\n", size, size);
-		if (arguments.sigma_is_inverse == true)
+		if (arguments.sigma_is_inverse == true) {
 			sigma = 1. / size;
-		else
+			printf("Sigma: %.6f\n", sigma);
+		} else {
 			sigma = size;
-		printf("Sigma: %f\n", sigma);
+			printf("Sigma: %.0f\n", sigma);
+		}
 		if (filename != NULL) {
 			printf("Writing input matrix into ");
 			if (strcmp(filename, "-") != 0)
@@ -381,9 +382,9 @@ int main(int argc, char **argv) {
 			write_matrix(args);
 			/* exit(EXIT_FAILURE); */
 		}
-	}
 
-	timer("Starting thread");
+		timer("Starting thread");
+	}
 
 	/* **** */
 
@@ -431,7 +432,7 @@ int main(int argc, char **argv) {
 		);
 		return 1;
 	}
-	printf("%" MKL_FORMAT "\n", M);
+	printf("%" MKL_FORMAT " eigenvalues found.\n", M);
 
 	timer("Computing");
 
